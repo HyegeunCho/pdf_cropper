@@ -9,8 +9,10 @@ fn main() -> Result<(), PdfiumError>{
     let pdfium = Pdfium::default();
 
     let document = pdfium.load_pdf_from_file("sample.pdf", None).expect("Failed to load PDF file");
+    let mut new_document = pdfium.create_new_pdf()?;
 
-    let render_config = PdfRenderConfig::new();
+
+
 
     let mut new_images: Vec<DynamicImage> = vec![];
 
@@ -22,44 +24,55 @@ fn main() -> Result<(), PdfiumError>{
             // .into_rgb8()
             // .save_with_format(format!("./out/page_{}.png", i), ImageFormat::Png);
         let new_image = crop_image(&origin_image, 150, 10);
-        new_images.push(new_image);
         // new_image.into_rgb8().save_with_format(format!("./out/page_{}.png", i), ImageFormat::Png);
+
+        let (new_width, new_height) = new_image.dimensions();
+        let new_size = PdfPagePaperSize::Custom(PdfPoints::new(new_width as f32), PdfPoints::new(new_height as f32));
+
+        let mut new_page = new_document.pages_mut().create_page_at_end(new_size)?;
+        new_page.objects_mut().create_image_object(
+            PdfPoints::new(0.0), 
+            PdfPoints::new(0.0), 
+            &new_image, 
+            Some(PdfPoints::new(new_width as f32)), 
+            Some(PdfPoints::new(new_height as f32)));
+
+        new_images.push(new_image);
         
         println!("Page {} cropped", i);
     }
 
     println!("Start making PDF");
 
-    let mut document = pdfium.create_new_pdf()?;
 
-    for (i, image) in new_images.iter().enumerate() {
-        println!("Processing image {}...", i);
-        let (width, height) = image.dimensions();
-        println!("Image dimensions: width = {}, height = {}", width, height);
-        // let rgba_image = image.to_rgba8();
-        // let rgba_buffer = rgba_image.into_raw();
-        println!("Creating new page...");
-        let mut page = document.pages_mut().create_page_at_end(PdfPagePaperSize::Custom(PdfPoints::new(width as f32), PdfPoints::new(height as f32)))?;
+    // for (i, image) in new_images.iter().enumerate() {
+    //     println!("Processing image {}...", i);
+    //     let (width, height) = image.dimensions();
+    //     println!("Image dimensions: width = {}, height = {}", width, height);
+    //     // let rgba_image = image.to_rgba8();
+    //     // let rgba_buffer = rgba_image.into_raw();
+    //     println!("Creating new page...");
+    //     let mut page = new_document.pages_mut().create_page_at_end(PdfPagePaperSize::Custom(PdfPoints::new(width as f32), PdfPoints::new(height as f32)))?;
         
-        println!("Creating image object...");
-        let image_clone = image.clone();
-        if let Some(image_object) = page.objects_mut().create_image_object(
-                PdfPoints::new(0.0), 
-                PdfPoints::new(0.0), 
-                &image_clone, 
-                Some(PdfPoints::new(width as f32)), 
-                Some(PdfPoints::new(height as f32))).ok() {
-            println!("Adding image object to page...");
-            page.objects_mut().add_object(image_object);
-            println!("Page {} processed", i);
-        } else {
-            println!("Failed to create image object for page {}", i);
-        }
-    }
+    //     println!("Creating image object...");
+    //     let image_clone = image.clone();
+    //     if let Some(image_object) = page.objects_mut().create_image_object(
+    //             PdfPoints::new(0.0), 
+    //             PdfPoints::new(0.0), 
+    //             &image_clone, 
+    //             Some(PdfPoints::new(width as f32)), 
+    //             Some(PdfPoints::new(height as f32))).ok() {
+    //         println!("Adding image object to page...");
+    //         page.objects_mut().add_object(image_object);
+    //         println!("Page {} processed", i);
+    //     } else {
+    //         println!("Failed to create image object for page {}", i);
+    //     }
+    // }
     
     let output_pdf_path = "output.pdf";
     println!("Saving PDF to file: {}", output_pdf_path);
-    document.save_to_file(output_pdf_path)?;
+    new_document.save_to_file(output_pdf_path)?;
     println!("PDF saved successfully.");
 
 
