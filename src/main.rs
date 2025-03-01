@@ -1,30 +1,34 @@
-use std::path::Path;
-use image::{ImageFormat, DynamicImage, GenericImageView, RgbaImage};
+use image::{ImageFormat, DynamicImage, GenericImageView};
 use pdfium_render::prelude::*;
 
 // https://github.com/bblanchon/pdfium-binaries?tab=readme-ov-file
 // https://github.com/ajrcarey/pdfium-render
 
 fn main() -> Result<(), PdfiumError>{
+
+    let is_make_cropped_image = true;
+    let cropped_images_path: &str = "./out";
+
+    let target_pdf_path = "sample.pdf";
+    let output_pdf_path = "output.pdf";
+
+
     let pdfium = Pdfium::default();
 
-    let document = pdfium.load_pdf_from_file("sample.pdf", None).expect("Failed to load PDF file");
+    let document = pdfium.load_pdf_from_file(target_pdf_path, None).expect("Failed to load PDF file");
     let mut new_document = pdfium.create_new_pdf()?;
 
-
-
-
-    let mut new_images: Vec<DynamicImage> = vec![];
-
     for (i, page) in document.pages().iter().enumerate() {
+        let page_num: usize = i + 1;
         let page_size = page.page_size();
-        
         let origin_image = page.render(page_size.width().value as i32, page_size.height().value as i32, Option::<PdfPageRenderRotation>::None).expect("Failed to render page")
             .as_image();
-            // .into_rgb8()
-            // .save_with_format(format!("./out/page_{}.png", i), ImageFormat::Png);
+
         let new_image = crop_image(&origin_image, 150, 10);
-        // new_image.into_rgb8().save_with_format(format!("./out/page_{}.png", i), ImageFormat::Png);
+        println!("Page {} cropped", page_num);
+        if is_make_cropped_image {
+            new_image.clone().into_rgb8().save_with_format(format!("{}/page_{}.png", cropped_images_path, page_num), ImageFormat::Png).expect("Error occured during save cropped image.");
+        }
 
         let (new_width, new_height) = new_image.dimensions();
         let new_size = PdfPagePaperSize::Custom(PdfPoints::new(new_width as f32), PdfPoints::new(new_height as f32));
@@ -35,50 +39,13 @@ fn main() -> Result<(), PdfiumError>{
             PdfPoints::new(0.0), 
             &new_image, 
             Some(PdfPoints::new(new_width as f32)), 
-            Some(PdfPoints::new(new_height as f32)));
-
-        new_images.push(new_image);
-        
-        println!("Page {} cropped", i);
+            Some(PdfPoints::new(new_height as f32)))?;
+        println!("New page {} saved", page_num);
     }
 
-    println!("Start making PDF");
-
-
-    // for (i, image) in new_images.iter().enumerate() {
-    //     println!("Processing image {}...", i);
-    //     let (width, height) = image.dimensions();
-    //     println!("Image dimensions: width = {}, height = {}", width, height);
-    //     // let rgba_image = image.to_rgba8();
-    //     // let rgba_buffer = rgba_image.into_raw();
-    //     println!("Creating new page...");
-    //     let mut page = new_document.pages_mut().create_page_at_end(PdfPagePaperSize::Custom(PdfPoints::new(width as f32), PdfPoints::new(height as f32)))?;
-        
-    //     println!("Creating image object...");
-    //     let image_clone = image.clone();
-    //     if let Some(image_object) = page.objects_mut().create_image_object(
-    //             PdfPoints::new(0.0), 
-    //             PdfPoints::new(0.0), 
-    //             &image_clone, 
-    //             Some(PdfPoints::new(width as f32)), 
-    //             Some(PdfPoints::new(height as f32))).ok() {
-    //         println!("Adding image object to page...");
-    //         page.objects_mut().add_object(image_object);
-    //         println!("Page {} processed", i);
-    //     } else {
-    //         println!("Failed to create image object for page {}", i);
-    //     }
-    // }
-    
-    let output_pdf_path = "output.pdf";
-    println!("Saving PDF to file: {}", output_pdf_path);
+    println!("Start making PDF to {}", output_pdf_path);
     new_document.save_to_file(output_pdf_path)?;
-    println!("PDF saved successfully.");
-
-
-    // dynamic_images_to_pdf(new_pages, "output.pdf");
-
-
+    println!("Pdf created to: {}", output_pdf_path);
 
     Ok(())
 }
@@ -178,31 +145,3 @@ fn crop_image(img: &DynamicImage, gray_threashold: u8, margin_reamin_percent: u3
 }
 
 
-fn dynamic_images_to_pdf(images: Vec<DynamicImage>, output_pdf_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    println!("Initializing Pdfium...");
-    // let pdfium = Pdfium::new(Pdfium::bind_to_library(Path::new("./libpdfium.dylib"))?);
-    let pdfium = Pdfium::default();
-    println!("Creating new PDF document...");
-    let mut document = pdfium.create_new_pdf()?;
-
-    for (i, image) in images.iter().enumerate() {
-        println!("Processing image {}...", i);
-        let (width, height) = image.dimensions();
-        println!("Image dimensions: width = {}, height = {}", width, height);
-        let rgba_image = image.to_rgba8();
-        let rgba_buffer = rgba_image.into_raw();
-        println!("Creating new page...");
-        let mut page = document.pages_mut().create_page_at_end(PdfPagePaperSize::Custom(PdfPoints::new(width as f32), PdfPoints::new(height as f32)))?;
-        println!("Creating image object...");
-        let image_object = page.objects_mut().create_image_object(PdfPoints::new(0 as f32), PdfPoints::new(0 as f32), &image, Some(PdfPoints::new(width as f32)), Some(PdfPoints::new(height as f32)))?;
-
-        println!("Adding image object to page...");
-        page.objects_mut().add_object(image_object);
-        println!("Page {} processed", i);
-    }
-    
-    println!("Saving PDF to file: {}", output_pdf_path);
-    document.save_to_file(output_pdf_path)?;
-    println!("PDF saved successfully.");
-    Ok(())
-}
