@@ -1,4 +1,4 @@
-use image::{ImageFormat, DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, ImageFormat};
 use pdfium_render::prelude::*;
 
 // https://github.com/bblanchon/pdfium-binaries?tab=readme-ov-file
@@ -12,6 +12,8 @@ fn main() -> Result<(), PdfiumError>{
     let target_pdf_path = "sample.pdf";
     let output_pdf_path = "output.pdf";
 
+    let gray_threshold = 150;
+    let margin_reamin_percent = 20;
 
     let pdfium = Pdfium::default();
 
@@ -24,7 +26,7 @@ fn main() -> Result<(), PdfiumError>{
         let origin_image = page.render(page_size.width().value as i32, page_size.height().value as i32, Option::<PdfPageRenderRotation>::None).expect("Failed to render page")
             .as_image();
 
-        let new_image = crop_image(&origin_image, 150, 10);
+        let new_image = crop_image(&origin_image, gray_threshold, margin_reamin_percent);
         println!("Page {} cropped", page_num);
 
         let (new_width, new_height) = new_image.dimensions();
