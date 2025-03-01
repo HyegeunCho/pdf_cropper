@@ -26,11 +26,16 @@ fn main() -> Result<(), PdfiumError>{
 
         let new_image = crop_image(&origin_image, 150, 10);
         println!("Page {} cropped", page_num);
+
+        let (new_width, new_height) = new_image.dimensions();
+        if new_width == 0 || new_height == 0 {
+            continue;
+        }
+
         if is_make_cropped_image {
             new_image.clone().into_rgb8().save_with_format(format!("{}/page_{}.png", cropped_images_path, page_num), ImageFormat::Png).expect("Error occured during save cropped image.");
         }
 
-        let (new_width, new_height) = new_image.dimensions();
         let new_size = PdfPagePaperSize::Custom(PdfPoints::new(new_width as f32), PdfPoints::new(new_height as f32));
 
         let mut new_page = new_document.pages_mut().create_page_at_end(new_size)?;
