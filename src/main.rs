@@ -1,19 +1,43 @@
+use std::fs;
+use std::io::ErrorKind;
 use image::{DynamicImage, GenericImageView, ImageFormat};
 use pdfium_render::prelude::*;
+use clap::Parser;
+
+#[derive(Parser)]
+struct Args {
+    #[arg(long, default_value_t=false, help="Save cropped images")]
+    save_cropped: bool,
+    #[arg(long, default_value_t=String::from("./out"), help="Path to save cropped images")]
+    cropped_path: String,
+    #[arg(long, default_value_t=String::from("sample.pdf"), help="Path to target PDF file")]
+    target: String,
+    #[arg(long, default_value_t=String::from("output.pdf"), help="Path to output PDF file")]
+    output: String,
+    #[arg(long, default_value_t=150, help="Gray threshold to detect margin")]
+    gray_threshold: u8,
+    #[arg(long, default_value_t=20, help="Margin remain percent")]
+    margin_remain_percent: u32
+}
+
 
 // https://github.com/bblanchon/pdfium-binaries?tab=readme-ov-file
 // https://github.com/ajrcarey/pdfium-render
 
+
+
 fn main() -> Result<(), PdfiumError>{
 
-    let is_make_cropped_image = true;
-    let cropped_images_path: &str = "./out";
+    let args = Args::parse();
+    
+    let is_make_cropped_image = args.save_cropped;
+    let cropped_images_path: &str = &args.cropped_path;
 
-    let target_pdf_path = "sample.pdf";
-    let output_pdf_path = "output.pdf";
+    let target_pdf_path = &args.target;
+    let output_pdf_path = &args.output;
 
-    let gray_threshold = 150;
-    let margin_reamin_percent = 20;
+    let gray_threshold = args.gray_threshold;
+    let margin_reamin_percent = args.margin_remain_percent;
 
     let pdfium = Pdfium::default();
 
@@ -35,6 +59,11 @@ fn main() -> Result<(), PdfiumError>{
         }
 
         if is_make_cropped_image {
+
+            if !is_diretory_exist(cropped_images_path) {
+                fs::create_dir_all(cropped_images_path).expect("Failed to create directory");
+            }
+
             new_image.clone().into_rgb8().save_with_format(format!("{}/page_{}.png", cropped_images_path, page_num), ImageFormat::Png).expect("Error occured during save cropped image.");
         }
 
@@ -151,4 +180,19 @@ fn crop_image(img: &DynamicImage, gray_threashold: u8, margin_reamin_percent: u3
     img.crop_imm(min_x - add_margin_x, min_y - add_margin_y, max_x - min_x + 2 * add_margin_x, max_y - min_y + 2 * add_margin_y)
 }
 
-
+fn is_diretory_exist(path: &str) -> bool {
+    match fs::metadata(path) {
+        Ok(metadata) => metadata.is_dir(),
+        Err(e) => {
+            if e.kind() == ErrorKind::PermissionDenied {
+                panic!("Permission denied to access path: {}", path);
+            } else if e.kind() == ErrorKind::NotFound {
+                // panic!("Path not found: {}", path);
+                false
+            } else {
+                panic!("Error occured during access path: {}", path);
+            }
+        }
+    }
+    
+}
