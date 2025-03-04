@@ -1,8 +1,12 @@
 use std::fs;
 use std::io::ErrorKind;
+use std::time::Duration;
+
 use image::{DynamicImage, GenericImageView, ImageFormat};
 use pdfium_render::prelude::*;
 use clap::Parser;
+use indicatif::{ProgressBar, ProgressStyle};
+
 
 #[derive(Parser)]
 struct Args {
@@ -42,8 +46,15 @@ fn main() -> Result<(), PdfiumError>{
     let pdfium = Pdfium::default();
 
     let document = pdfium.load_pdf_from_file(target_pdf_path, None).expect("Failed to load PDF file");
+
+    println!("[1/3] PDF loaded: {} ({} pages)", target_pdf_path, document.pages().len());
+
     let mut new_document = pdfium.create_new_pdf()?;
 
+
+    let pb = ProgressBar::new(document.pages().len() as u64);
+
+    println!("[2/3] Start cropping pages");
     for (i, page) in document.pages().iter().enumerate() {
         let page_num: usize = i + 1;
         let page_size = page.page_size();
@@ -51,10 +62,11 @@ fn main() -> Result<(), PdfiumError>{
             .as_image();
 
         let new_image = crop_image(&origin_image, gray_threshold, margin_reamin_percent);
-        println!("Page {} cropped", page_num);
+        // println!("\rPage {} cropped", page_num);
 
         let (new_width, new_height) = new_image.dimensions();
         if new_width == 0 || new_height == 0 {
+            pb.inc(1);
             continue;
         }
 
@@ -76,12 +88,17 @@ fn main() -> Result<(), PdfiumError>{
             &new_image, 
             Some(PdfPoints::new(new_width as f32)), 
             Some(PdfPoints::new(new_height as f32)))?;
-        println!("New page {} saved", page_num);
+        // println!("\rNew page {} saved", page_num);
+        pb.inc(1);
     }
 
-    println!("Start making PDF to {}", output_pdf_path);
-    new_document.save_to_file(output_pdf_path)?;
-    println!("Pdf created to: {}", output_pdf_path);
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_style(ProgressStyle::default_spinner().template(&format!("{{spinner:.green}} [3/3] Start making PDF to {output_pdf_path}")).unwrap());
+    spinner.enable_steady_tick(Duration::from_millis(10));
+    // println!("[3/3] Start making PDF to {}", output_pdf_path);
+    new_document.save_to_file(output_pdf_path)?;    
+    spinner.finish();
+    println!("Pdf created to: {output_pdf_path}");
 
     Ok(())
 }
