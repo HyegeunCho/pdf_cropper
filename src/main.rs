@@ -1,10 +1,13 @@
 use std::fs;
 use std::io::ErrorKind;
 use std::time::Duration;
+use imageproc::contrast::otsu_level;
+use imageproc::contours::{find_contours_with_threshold};
 
 use image::{DynamicImage, GenericImageView, ImageFormat};
 use pdfium_render::prelude::*;
 use clap::Parser;
+use imageproc::rect::Rect;
 use indicatif::{ProgressBar, ProgressStyle};
 
 
@@ -196,6 +199,33 @@ fn crop_image(img: &DynamicImage, gray_threashold: u8, margin_reamin_percent: u3
     // println!("min_x: {}, max_x: {}, min_y: {}, max_y: {}", min_x, max_x, min_y, max_y);
     img.crop_imm(min_x - add_margin_x, min_y - add_margin_y, max_x - min_x + 2 * add_margin_x, max_y - min_y + 2 * add_margin_y)
 }
+
+fn get_text_region(img: DynamicImage) -> Option<Rect>{
+    let gray_image = img.into_luma8();
+    let threshold_value = otsu_level(&gray_image);
+    let contours = find_contours_with_threshold::<u32>(&gray_image, threshold_value);
+    
+    let mut min_x = gray_image.width();
+    let mut min_y = gray_image.height();
+    let mut max_x = 0;
+    let mut max_y = 0;
+    
+    for contour in contours {
+        for pt in contour.points.iter() {
+            if pt.x < min_x { min_x = pt.x; }
+            if pt.y < min_y { min_y = pt.y; }
+            if pt.x > max_x { max_x = pt.x; }
+            if pt.y > max_y { max_y = pt.y; }
+        }
+    }
+    
+    if max_x > min_x && max_y > min_y {
+        Some(Rect::at(min_x as i32, min_y as i32).of_size((max_x - min_x) as u32, (max_y - min_y) as u32))
+    } else { 
+        None
+    }
+}
+
 
 fn is_diretory_exist(path: &str) -> bool {
     match fs::metadata(path) {
