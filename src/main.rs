@@ -64,7 +64,8 @@ fn main() -> Result<(), PdfiumError>{
         let origin_image = page.render(page_size.width().value as i32, page_size.height().value as i32, Option::<PdfPageRenderRotation>::None).expect("Failed to render page")
             .as_image();
 
-        let new_image = crop_image(&origin_image, gray_threshold, margin_reamin_percent);
+        // let new_image = crop_image(&origin_image, gray_threshold, margin_reamin_percent);
+        let new_image = crop_image_with_contour(&origin_image, margin_reamin_percent);
         // println!("\rPage {} cropped", page_num);
 
         let (new_width, new_height) = new_image.dimensions();
@@ -200,7 +201,13 @@ fn crop_image(img: &DynamicImage, gray_threashold: u8, margin_reamin_percent: u3
     img.crop_imm(min_x - add_margin_x, min_y - add_margin_y, max_x - min_x + 2 * add_margin_x, max_y - min_y + 2 * add_margin_y)
 }
 
-fn get_text_region(img: DynamicImage) -> Option<Rect>{
+fn crop_image_with_contour(img: &DynamicImage, margin_remain_percent: u32) -> DynamicImage {
+    let text_rect = get_text_region(img.clone(), margin_remain_percent).unwrap();
+    img.crop_imm(text_rect.left() as u32, text_rect.top() as u32, text_rect.width(), text_rect.height())
+}
+
+fn get_text_region(img: DynamicImage, margin_remain_percent: u32) -> Option<Rect>{
+    let (width, height) = img.dimensions();
     let gray_image = img.into_luma8();
     let threshold_value = otsu_level(&gray_image);
     let contours = find_contours_with_threshold::<u32>(&gray_image, threshold_value);
@@ -218,7 +225,22 @@ fn get_text_region(img: DynamicImage) -> Option<Rect>{
             if pt.y > max_y { max_y = pt.y; }
         }
     }
-    
+
+    let res_width = max_x - min_x;
+    let res_height = max_y - min_y;
+
+    let width_margin = width - res_width;
+    let height_margin = height - res_height;
+
+    let width_offset = width_margin * margin_remain_percent  / 200;
+    let height_offset = height_margin * margin_remain_percent / 200;
+
+    min_x = (min_x - width_offset).clamp(0, min_x);
+    max_x = (max_x + width_offset).clamp(max_x, width);
+
+    min_y = (min_y - height_offset).clamp(0, min_y);
+    max_y = (max_y + height_offset).clamp(max_y, height);
+
     if max_x > min_x && max_y > min_y {
         Some(Rect::at(min_x as i32, min_y as i32).of_size((max_x - min_x) as u32, (max_y - min_y) as u32))
     } else { 
