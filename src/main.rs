@@ -23,9 +23,9 @@ struct Args {
     output: String,
     #[arg(long, default_value_t=150, help="Gray threshold to detect margin")]
     gray_threshold: u8,
-    #[arg(long, default_value_t=20, help="Margin remain percent")]
+    #[arg(long, default_value_t=30, help="Margin remain percent")]
     margin_remain_percent: u32,
-    #[arg(long, default_value_t=120, help="DPI to render PDF")]
+    #[arg(long, default_value_t=150, help="DPI to render PDF")]
     target_dpi: u32
 }
 
@@ -71,15 +71,10 @@ fn main() -> Result<(), PdfiumError>{
         let target_width = (page_size.width().to_inches() * target_dpi as f32) as i32;
         let target_height = (page_size.height().to_inches() * target_dpi as f32) as i32;
 
-        let origin_image = page.render(target_width, target_height, Option::<PdfPageRenderRotation>::None).expect("Failed to render page")
-            .as_image();
+        let origin_image = page.render(target_width, target_height, Option::<PdfPageRenderRotation>::None).expect("Failed to render page").as_image();
 
         // let new_image = crop_image(&origin_image, gray_threshold, margin_reamin_percent);
-        let new_image = crop_image_with_contour(&origin_image, margin_reamin_percent);
-        // println!("\rPage {} cropped", page_num);
-
-        
-
+        let new_image = crop_image_with_contour(&origin_image, margin_reamin_percent).into_rgb8();
 
         let (new_width, new_height) = new_image.dimensions();
         if new_width == 0 || new_height == 0 {
@@ -102,9 +97,11 @@ fn main() -> Result<(), PdfiumError>{
         new_page.objects_mut().create_image_object(
             PdfPoints::new(0.0), 
             PdfPoints::new(0.0), 
-            &new_image, 
+            // &new_image,
+            &DynamicImage::ImageRgb8(new_image),
             Some(PdfPoints::new(new_width as f32)), 
             Some(PdfPoints::new(new_height as f32)))?;
+        new_page.flatten()?;
         // println!("\rNew page {} saved", page_num);
         pb.inc(1);
     }
@@ -248,11 +245,18 @@ fn get_text_region(img: DynamicImage, margin_remain_percent: u32) -> Option<Rect
     let width_offset = width_margin * margin_remain_percent  / 200;
     let height_offset = height_margin * margin_remain_percent / 200;
 
-    min_x = (min_x - width_offset).clamp(0, min_x);
-    max_x = (max_x + width_offset).clamp(max_x, width);
 
-    min_y = (min_y - height_offset).clamp(0, min_y);
-    max_y = (max_y + height_offset).clamp(max_y, height);
+    let min_x_result: i32 = min_x as i32 - width_offset as i32;
+    min_x = min_x_result.clamp(0, min_x as i32) as u32;
+
+    let max_x_result: i32 = max_x as i32 - width_offset as i32;
+    max_x = max_x_result.clamp(max_x as i32, width as i32) as u32;
+
+    let min_y_result:i32 = min_y as i32 - height_offset as i32;
+    min_y = min_y_result.clamp(0, min_y as i32) as u32;
+
+    let max_y_result: i32 = max_y as i32 - height_offset as i32;
+    max_y = max_y_result.clamp(max_y as i32, height as i32) as u32;
 
     if max_x > min_x && max_y > min_y {
         Some(Rect::at(min_x as i32, min_y as i32).of_size((max_x - min_x) as u32, (max_y - min_y) as u32))
