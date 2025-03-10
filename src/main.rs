@@ -24,7 +24,9 @@ struct Args {
     #[arg(long, default_value_t=150, help="Gray threshold to detect margin")]
     gray_threshold: u8,
     #[arg(long, default_value_t=20, help="Margin remain percent")]
-    margin_remain_percent: u32
+    margin_remain_percent: u32,
+    #[arg(long, default_value_t=120, help="DPI to render PDF")]
+    target_dpi: u32
 }
 
 
@@ -46,9 +48,13 @@ fn main() -> Result<(), PdfiumError>{
     let gray_threshold = args.gray_threshold;
     let margin_reamin_percent = args.margin_remain_percent;
 
+    let target_dpi = args.target_dpi;
+
     let pdfium = Pdfium::default();
 
     let document = pdfium.load_pdf_from_file(target_pdf_path, None).expect("Failed to load PDF file");
+
+    
 
     println!("[1/3] PDF loaded: {} ({} pages)", target_pdf_path, document.pages().len());
 
@@ -61,12 +67,19 @@ fn main() -> Result<(), PdfiumError>{
     for (i, page) in document.pages().iter().enumerate() {
         let page_num: usize = i + 1;
         let page_size = page.page_size();
-        let origin_image = page.render(page_size.width().value as i32, page_size.height().value as i32, Option::<PdfPageRenderRotation>::None).expect("Failed to render page")
+        
+        let target_width = (page_size.width().to_inches() * target_dpi as f32) as i32;
+        let target_height = (page_size.height().to_inches() * target_dpi as f32) as i32;
+
+        let origin_image = page.render(target_width, target_height, Option::<PdfPageRenderRotation>::None).expect("Failed to render page")
             .as_image();
 
         // let new_image = crop_image(&origin_image, gray_threshold, margin_reamin_percent);
         let new_image = crop_image_with_contour(&origin_image, margin_reamin_percent);
         // println!("\rPage {} cropped", page_num);
+
+        
+
 
         let (new_width, new_height) = new_image.dimensions();
         if new_width == 0 || new_height == 0 {
@@ -80,7 +93,7 @@ fn main() -> Result<(), PdfiumError>{
                 fs::create_dir_all(cropped_images_path).expect("Failed to create directory");
             }
 
-            new_image.clone().into_rgb8().save_with_format(format!("{}/page_{}.png", cropped_images_path, page_num), ImageFormat::Png).expect("Error occured during save cropped image.");
+            new_image.clone().save_with_format(format!("{}/page_{}.png", cropped_images_path, page_num), ImageFormat::Png).expect("Error occured during save cropped image.");
         }
 
         let new_size = PdfPagePaperSize::Custom(PdfPoints::new(new_width as f32), PdfPoints::new(new_height as f32));
